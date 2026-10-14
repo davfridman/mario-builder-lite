@@ -987,12 +987,20 @@ function share() {
   const rec = bestRecord();
   showOverlay('<h2>Share link</h2><p>Anyone who opens this plays your level' +
     (rec ? '.<br>It carries the record to beat: <b>' + esc(rec.name) + '</b> &middot; ' + fmtTime(rec.time) : '') + '</p>' +
+    '<div class="sharebox"><div class="qrwrap" id="oQr"></div><div class="sharelink">' +
     '<input id="oUrl" class="url" readonly value="' + url + '">' +
     '<div class="row"><button id="oCopy" class="btn go">Copy link</button>' +
     '<a id="oOpen" class="btn a" href="' + url + '" target="_blank" rel="noopener">Open</a>' +
-    '<button id="oClose" class="btn">Close</button></div>');
+    '<a id="oSaveQr" class="btn a" download="level-qr.png" hidden>Save QR</a>' +
+    '<button id="oClose" class="btn">Close</button></div></div></div>');
   const inp = $('oUrl');
-  inp.focus(); inp.select();
+  const qr = makeQr(url), box = $('oQr');
+  if (qr) {
+    box.append(qr);
+    const cap = document.createElement('p'); cap.textContent = 'Scan with a phone camera to play'; box.append(cap);
+    try { $('oSaveQr').href = qr.toDataURL('image/png'); $('oSaveQr').hidden = false; } catch (e) {}
+  } else box.remove();
+  if (!isTouch) { inp.focus(); inp.select(); }
   $('oCopy').onclick = () => {
     const ok = () => toast('Link copied! Send it to anyone');
     const manual = () => { inp.focus(); inp.select(); try { document.execCommand('copy') ? ok() : toast('Press Ctrl/Cmd+C to copy'); } catch (e) { toast('Press Ctrl/Cmd+C to copy'); } };
@@ -1000,6 +1008,26 @@ function share() {
     else manual();
   };
   $('oClose').onclick = () => { if (mode === 'play' && state === 'won') showWin(); else hideOverlay(); };
+}
+// QR code of the share link (vendor/qrcode-generator). Dark ink on white with the standard 4-module
+// quiet zone so phone cameras read it; returns null (and the share box just shows the link) if it can't be made.
+function makeQr(text) {
+  if (typeof window.qrcode !== 'function') return null;
+  let q = null;
+  for (const level of ['M', 'L']) {
+    try { q = window.qrcode(0, level); q.addData(text, 'Byte'); q.make(); break; } catch (e) { q = null; }
+  }
+  if (!q) return null;
+  const n = q.getModuleCount(), quiet = 4, scale = Math.max(4, Math.floor(520 / (n + quiet * 2)));
+  const c = document.createElement('canvas');
+  c.width = c.height = (n + quiet * 2) * scale;
+  c.className = 'qr'; c.setAttribute('role', 'img'); c.setAttribute('aria-label', 'QR code of the share link');
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#000';
+  for (let r = 0; r < n; r++) for (let col = 0; col < n; col++)
+    if (q.isDark(r, col)) g.fillRect((col + quiet) * scale, (r + quiet) * scale, scale, scale);
+  return c;
 }
 // always the full public address, even when the page is opened from a file or localhost
 const PUBLIC_URL = 'https://davfridman.github.io/mario-builder-lite/';
