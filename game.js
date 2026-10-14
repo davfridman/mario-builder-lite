@@ -199,7 +199,13 @@ function makeIcon(t, size) {
     if (t === HPLAT) { ctx.moveTo(2, 7); ctx.lineTo(9, 3); ctx.lineTo(9, 11); ctx.moveTo(30, 7); ctx.lineTo(23, 3); ctx.lineTo(23, 11); }
     else { ctx.moveTo(16, 1); ctx.lineTo(11, 8); ctx.lineTo(21, 8); ctx.moveTo(16, 21); ctx.lineTo(11, 14); ctx.lineTo(21, 14); }
     ctx.fill();
-  } else if (t === GOAL) { ctx.save(); ctx.scale(0.25, 0.25); drawGoal(40, 96, 0); ctx.restore(); }
+  } else if (t === GOAL) {
+    ctx.fillStyle = '#e8e8f0'; ctx.fillRect(9, 5, 3, 25);
+    ctx.strokeStyle = '#1d1b4b'; ctx.lineWidth = 1.5; ctx.strokeRect(9, 5, 3, 25);
+    ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(10.5, 4, 3.5, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.moveTo(12, 7); ctx.lineTo(28, 13); ctx.lineTo(12, 20); ctx.closePath(); ctx.fill();
+    ctx.stroke();
+  }
   else if (t === EMPTY) {
     ctx.save(); ctx.translate(16, 16); ctx.rotate(-0.6);
     ctx.fillStyle = '#ff8fa3'; ctx.fillRect(-11, -6, 14, 12);
