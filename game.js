@@ -5,23 +5,24 @@ const T = 32, W = 80, H = 17, VW = 960, VH = H * T;
 const EMPTY = 0, GROUND = 1, BRICK = 2, QBLOCK = 3, COIN = 4, SPIKE = 5, ENEMY = 6,
       START = 7, GOAL = 8, USED = 9, SPRING = 10, HPLAT = 11, VPLAT = 12;
 const PALETTE = [
-  { t: GROUND, icon: '🟫', name: 'Ground', key: '1' },
-  { t: BRICK, icon: '🧱', name: 'Brick (breaks from below)', key: '2' },
-  { t: QBLOCK, icon: '❓', name: '? Block (coin)', key: '3' },
-  { t: COIN, icon: '🪙', name: 'Coin', key: '4' },
-  { t: SPIKE, icon: '🔺', name: 'Spikes', key: '5' },
-  { t: ENEMY, icon: '👾', name: 'Enemy', key: '6' },
-  { t: SPRING, icon: '🌀', name: 'Spring', key: '7' },
-  { t: HPLAT, icon: '↔️', name: 'Moving platform (sideways)', key: '8' },
-  { t: VPLAT, icon: '↕️', name: 'Moving platform (up/down)', key: '9' },
-  { t: START, icon: '🧍', name: 'Start', key: 'S' },
-  { t: GOAL, icon: '🏁', name: 'Goal', key: 'G' },
-  { t: EMPTY, icon: '🧽', name: 'Erase', key: 'E' },
+  { t: GROUND, name: 'Ground', key: '1', group: 'Blocks', desc: 'Solid floor and walls. You can stand on it and bump into it.' },
+  { t: BRICK, name: 'Brick', key: '2', group: 'Blocks', desc: 'Solid, but it shatters when you hit it from below.' },
+  { t: QBLOCK, name: '? Block', key: '3', group: 'Blocks', desc: 'Hit it from below to pop out a coin.' },
+  { t: COIN, name: 'Coin', key: '4', group: 'Blocks', desc: 'Grab it for points. Players try to collect them all.' },
+  { t: SPIKE, name: 'Spikes', key: '5', group: 'Danger', desc: 'Touch them and you restart. Put them on the floor.' },
+  { t: ENEMY, name: 'Enemy', key: '6', group: 'Danger', desc: 'Patrols back and forth. Stomp it from above, avoid it from the side.' },
+  { t: SPRING, name: 'Spring', key: '7', group: 'Movement', desc: 'Land on it for a huge bounce. Reach high platforms.' },
+  { t: HPLAT, name: 'Slider', key: '8', group: 'Movement', desc: 'A platform that slides left and right. Ride it across gaps.' },
+  { t: VPLAT, name: 'Lift', key: '9', group: 'Movement', desc: 'A platform that moves up and down.' },
+  { t: START, name: 'Start', key: 'S', group: 'Markers', desc: 'Where the player spawns. There is only one.' },
+  { t: GOAL, name: 'Goal flag', key: 'G', group: 'Markers', desc: 'Reach the pole to win. There is only one, and you need it to play.' },
+  { t: EMPTY, name: 'Eraser', key: 'E', group: 'Markers', desc: 'Click to clear a tile. Right-click erases with any tile selected.' },
 ];
-const STORE = 'lbl-level', CLEARED = 'lbl-cleared';
+const STORE = 'lbl-level', CLEARED = 'lbl-cleared', STEPS = 'lbl-steps-hidden';
 
 const $ = id => document.getElementById(id);
-const cv = $('c'), ctx = cv.getContext('2d');
+const cv = $('c');
+let ctx = cv.getContext('2d');
 const overlay = $('overlay'), toastEl = $('toast'), hint = $('hint'), slider = $('scroll');
 const btnPlay = $('btnPlay'), btnShare = $('btnShare'), btnMute = $('btnMute');
 
@@ -104,7 +105,9 @@ function save() {
   updateShare();
 }
 function updateShare() {
-  btnShare.textContent = isCleared() ? '🔗 Copy share link' : '🔒 Share (beat it first)';
+  const ok = isCleared();
+  btnShare.textContent = ok ? 'Share' : 'Share (beat it first)';
+  btnShare.classList.toggle('locked', !ok);
 }
 
 // ---------- audio (all synthesized, no files) ----------
@@ -163,7 +166,7 @@ function startMusic() {
 }
 function stopMusic() { musicOn = false; clearInterval(mTimer); }
 function setMuted(m) {
-  muted = m; btnMute.textContent = m ? '🔇' : '🔊';
+  muted = m; btnMute.textContent = m ? 'Sound: off' : 'Sound: on';
   if (master) master.gain.value = m ? 0 : 1;
 }
 
@@ -177,34 +180,95 @@ function showOverlay(html) { overlay.innerHTML = '<div class="card">' + html + '
 function hideOverlay() { overlay.hidden = true; }
 function setHint() {
   hint.textContent = mode === 'edit'
-    ? 'Click / drag to paint · right-click or E to erase · keys 1-9, S, G pick tiles · A/D, arrows, wheel or slider scroll · Tab to play'
-    : '←/→ or A/D move · Space / ↑ / W jump (hold for higher) · stomp enemies · R restart · Tab or Esc to edit · M mute';
+    ? 'Click or drag to paint · right-click erases · scroll the level with A/D, the mouse wheel or the slider · Tab to play'
+    : 'Tab or Esc goes back to the editor · M toggles sound';
 }
+
+// palette icons are drawn with the game's own art, so the toolbar matches the level
+function makeIcon(t, size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size * 2; c.style.width = c.style.height = size + 'px';
+  const saved = ctx; ctx = c.getContext('2d');
+  ctx.scale(size * 2 / 32, size * 2 / 32);
+  ctx.textAlign = 'center';
+  if (t === PLAYER_ICON) drawPlayerAt(4, 4, 1, 1, false, 0);
+  else if (t === ENEMY) drawEnemy(3, 6, 26, 26, 1, 0, false);
+  else if (t === HPLAT || t === VPLAT) {
+    ctx.save(); ctx.scale(0.5, 0.5); drawPlat(0, 24); ctx.restore();
+    ctx.fillStyle = '#1d1b4b'; ctx.beginPath();
+    if (t === HPLAT) { ctx.moveTo(2, 7); ctx.lineTo(9, 3); ctx.lineTo(9, 11); ctx.moveTo(30, 7); ctx.lineTo(23, 3); ctx.lineTo(23, 11); }
+    else { ctx.moveTo(16, 1); ctx.lineTo(11, 8); ctx.lineTo(21, 8); ctx.moveTo(16, 21); ctx.lineTo(11, 14); ctx.lineTo(21, 14); }
+    ctx.fill();
+  } else if (t === GOAL) { ctx.save(); ctx.scale(0.25, 0.25); drawGoal(40, 96, 0); ctx.restore(); }
+  else if (t === EMPTY) {
+    ctx.save(); ctx.translate(16, 16); ctx.rotate(-0.6);
+    ctx.fillStyle = '#ff8fa3'; ctx.fillRect(-11, -6, 14, 12);
+    ctx.fillStyle = '#fffaf0'; ctx.fillRect(3, -6, 9, 12);
+    ctx.strokeStyle = '#1d1b4b'; ctx.lineWidth = 2; ctx.strokeRect(-11, -6, 23, 12);
+    ctx.restore();
+  } else drawTile(t, 0, 0, false, 0, 0, 0);
+  ctx = saved;
+  return c;
+}
+const PLAYER_ICON = START;
 const palButtons = [];
-PALETTE.forEach(p => {
-  const b = document.createElement('button');
-  b.innerHTML = p.icon + '<small>' + p.key + '</small>';
-  b.title = p.name + ' (' + p.key + ')';
-  b.onclick = () => selectTile(p.t);
-  $('palette').appendChild(b); palButtons.push(b);
-});
+{
+  const box = $('palette');
+  const groups = [];
+  PALETTE.forEach(p => {
+    let g = groups.find(x => x.name === p.group);
+    if (!g) { g = { name: p.group, items: [] }; groups.push(g); }
+    g.items.push(p);
+  });
+  groups.forEach(g => {
+    const sec = document.createElement('div'); sec.className = 'group';
+    sec.innerHTML = '<h3></h3><div class="grid"></div>';
+    sec.querySelector('h3').textContent = g.name;
+    g.items.forEach(p => {
+      const b = document.createElement('button'); b.className = 'tile'; b.type = 'button';
+      b.title = p.name + ' (' + p.key + ') — ' + p.desc;
+      b.appendChild(makeIcon(p.t, 34));
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = p.name;
+      const ky = document.createElement('span'); ky.className = 'ky'; ky.textContent = p.key;
+      b.append(nm, ky);
+      b.onclick = () => selectTile(p.t);
+      sec.querySelector('.grid').appendChild(b); palButtons[PALETTE.indexOf(p)] = b;
+    });
+    box.appendChild(sec);
+  });
+}
 function selectTile(t) {
   sel = t;
   PALETTE.forEach((p, i) => palButtons[i].classList.toggle('sel', p.t === t));
+  const p = PALETTE.find(q => q.t === t), info = $('info');
+  info.textContent = '';
+  const body = document.createElement('div');
+  const h = document.createElement('h4'); h.textContent = p.name;
+  const d = document.createElement('p'); d.textContent = p.desc;
+  const k = document.createElement('small'); k.textContent = 'Shortcut: ' + p.key;
+  body.append(h, d, k);
+  info.append(makeIcon(t, 56), body);
 }
+$('stepsClose').onclick = () => {
+  $('steps').hidden = true;
+  try { localStorage.setItem(STEPS, '1'); } catch (e) {}
+};
+try { if (localStorage.getItem(STEPS)) $('steps').hidden = true; } catch (e) {}
 
 // ---------- mode switching ----------
 function enterPlay() {
-  if (!hasType(GOAL)) { toast('Place a 🏁 goal first'); return; }
+  if (!hasType(GOAL)) { toast('Place a goal flag first'); return; }
   mode = 'play'; deaths = 0; hideOverlay(); painting = null;
   startPlay(); startMusic(); setHint();
-  btnPlay.innerHTML = '✏️ Edit <kbd>Tab</kbd>'; slider.style.visibility = 'hidden';
+  btnPlay.innerHTML = 'Edit <kbd>Tab</kbd>'; slider.style.visibility = 'hidden';
+  $('paneBuild').hidden = true; $('panePlay').hidden = false; $('steps').style.display = 'none';
 }
 function enterEdit() {
   mode = 'edit'; stopMusic(); hideOverlay(); setHint();
   history.replaceState(null, '', location.pathname + '#' + encode(level));
-  btnPlay.innerHTML = '▶ Play <kbd>Tab</kbd>'; slider.style.visibility = 'visible';
+  btnPlay.innerHTML = 'Play <kbd>Tab</kbd>'; slider.style.visibility = 'visible';
   slider.value = camX = Math.max(0, Math.min(camX, W * T - VW));
+  $('paneBuild').hidden = false; $('panePlay').hidden = true; $('steps').style.display = '';
 }
 
 // ---------- gameplay ----------
@@ -286,9 +350,9 @@ function win() {
 }
 function showWin() {
   const secs = (frames / 60).toFixed(1);
-  showOverlay('<h2>🏁 Level cleared!</h2><p>⏱ ' + secs + 's · 🪙 ' + coins + '/' + totalCoins + ' · 💀 ' + deaths + '</p>' +
-    '<div class="row"><button id="oReplay">↻ Replay</button><button id="oEdit">✏️ Edit</button>' +
-    '<button id="oShare" class="primary">🔗 Get share link</button></div>');
+  showOverlay('<h2>Level cleared!</h2><p>Time ' + secs + 's &middot; Coins ' + coins + '/' + totalCoins + ' &middot; Deaths ' + deaths + '</p>' +
+    '<div class="row"><button id="oReplay" class="btn">Replay</button><button id="oEdit" class="btn">Edit level</button>' +
+    '<button id="oShare" class="btn sun">Get share link</button></div>');
   $('oReplay').onclick = () => { hideOverlay(); deaths = 0; startPlay(); startMusic(); };
   $('oEdit').onclick = enterEdit;
   $('oShare').onclick = share;
@@ -484,7 +548,7 @@ function drawTile(t, x, y, above, tm, tx, ty) {
       ctx.fillStyle = '#a56a00'; ctx.fillRect(x, y, T, T);
       ctx.fillStyle = '#f5b82e'; ctx.fillRect(x + 2, y + 2, T - 4, T - 4);
       ctx.fillStyle = 'rgba(255,255,255,' + (0.15 + 0.15 * Math.sin(tm / 10)) + ')'; ctx.fillRect(x + 2, y + 2, T - 4, 8);
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 22px system-ui'; ctx.textAlign = 'center'; ctx.fillText('?', x + 16, y + 24);
+      ctx.fillStyle = '#fff'; ctx.font = '700 22px "Fredoka",system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText('?', x + 16, y + 24);
       break;
     case USED:
       ctx.fillStyle = '#5c4630'; ctx.fillRect(x, y, T, T); ctx.fillStyle = '#8a6a4a'; ctx.fillRect(x + 2, y + 2, T - 4, T - 4);
@@ -534,10 +598,23 @@ function drawLevel(arr, edit, tm) {
     drawTile(t, x, y, above, tm, tx, ty);
   }
 }
+const FONT = '"Fredoka","Arial Rounded MT Bold",system-ui,sans-serif';
 function text(s, x, y, align) {
-  ctx.textAlign = align || 'left'; ctx.font = 'bold 20px system-ui';
-  ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillText(s, x + 2, y + 2);
+  ctx.textAlign = align || 'left'; ctx.font = '700 22px ' + FONT;
+  ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1d1b4b'; ctx.strokeText(s, x, y);
   ctx.fillStyle = '#fff'; ctx.fillText(s, x, y);
+}
+function pill(label, value, x, y, align) {
+  ctx.font = '700 18px ' + FONT; ctx.textAlign = 'left';
+  const lw = ctx.measureText(label + ' ').width, vw = ctx.measureText(value).width;
+  const w = lw + vw + 24, h = 32;
+  const px = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.fillStyle = 'rgba(255,250,240,.95)'; ctx.strokeStyle = '#1d1b4b'; ctx.lineWidth = 3;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(px, y, w, h, 12); else ctx.rect(px, y, w, h);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ff5d48'; ctx.fillText(label, px + 12, y + 22);
+  ctx.fillStyle = '#1d1b4b'; ctx.fillText(value, px + 12 + lw, y + 22);
 }
 function render() {
   ctx.save();
@@ -560,7 +637,7 @@ function render() {
       ctx.globalAlpha = 1;
       ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, T - 2, T - 2);
     }
-    if (!hasType(GOAL)) text('Place a 🏁 goal to be able to play', VW / 2, 34, 'center');
+    if (!hasType(GOAL)) text('Place a goal flag to be able to play', VW / 2, 34, 'center');
   } else {
     drawLevel(world, false, tick);
     for (const pl of plats) drawPlat(pl.x - camX, pl.y);
@@ -574,9 +651,9 @@ function render() {
       ctx.fillRect(q.x - camX - q.s / 2, q.y - q.s / 2, q.s, q.s);
     }
     ctx.globalAlpha = 1;
-    text('🪙 ' + coins + '/' + totalCoins, 14, 30);
-    text('⏱ ' + (frames / 60).toFixed(1) + 's', VW / 2, 30, 'center');
-    text('💀 ' + deaths, VW - 14, 30, 'right');
+    pill('COINS', coins + '/' + totalCoins, 12, 10, 'left');
+    pill('TIME', (frames / 60).toFixed(1) + 's', VW / 2, 10, 'center');
+    pill('DEATHS', String(deaths), VW - 12, 10, 'right');
   }
   ctx.restore();
 }
@@ -655,22 +732,22 @@ $('btnClear').onclick = () => {
 };
 btnShare.onclick = share;
 function share() {
-  if (!hasType(GOAL)) { toast('Place a 🏁 goal first'); return; }
+  if (!hasType(GOAL)) { toast('Place a goal flag first'); return; }
   if (!isCleared()) {
-    toast('Beat your level first 🏁 — then you can share it');
+    toast('Beat your level first, then you can share it');
     if (mode === 'edit') enterPlay();
     return;
   }
   const url = shareUrl();
-  showOverlay('<h2>🔗 Share link</h2><p>Anyone who opens this plays your level</p>' +
+  showOverlay('<h2>Share link</h2><p>Anyone who opens this plays your level</p>' +
     '<input id="oUrl" class="url" readonly value="' + url + '">' +
-    '<div class="row"><button id="oCopy" class="primary">📋 Copy</button>' +
-    '<a id="oOpen" class="btn" href="' + url + '" target="_blank" rel="noopener">↗ Open</a>' +
-    '<button id="oClose">Close</button></div>');
+    '<div class="row"><button id="oCopy" class="btn go">Copy link</button>' +
+    '<a id="oOpen" class="btn a" href="' + url + '" target="_blank" rel="noopener">Open</a>' +
+    '<button id="oClose" class="btn">Close</button></div>');
   const inp = $('oUrl');
   inp.focus(); inp.select();
   $('oCopy').onclick = () => {
-    const ok = () => toast('Link copied! Send it to anyone 🎉');
+    const ok = () => toast('Link copied! Send it to anyone');
     const manual = () => { inp.focus(); inp.select(); try { document.execCommand('copy') ? ok() : toast('Press Ctrl/Cmd+C to copy'); } catch (e) { toast('Press Ctrl/Cmd+C to copy'); } };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, manual);
     else manual();
