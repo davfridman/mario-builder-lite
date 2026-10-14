@@ -25,4 +25,7 @@ canvas{width:100%;height:auto;display:block;border-radius:10px;border:3px solid 
 #overlay h2{margin:0 0 6px;font-size:28px}
 #overlay p{margin:4px 0 14px;color:var(--muted);font-size:17px}
 #overlay .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+#overlay .url{width:min(560px,70vw);margin:0 0 14px;padding:10px 12px;border-radius:8px;border:1px solid #3b4166;background:#0f1120;color:var(--ink);font:13px ui-monospace,Menlo,monospace}
+.btn{font:inherit;color:var(--ink);background:#2a2f47;border:1px solid #3b4166;border-radius:8px;padding:8px 12px;text-decoration:none;display:inline-block}
+.btn:hover{background:#363c5c}
 #toast{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--accent2);color:#222;font-weight:700;padding:8px 16px;border-radius:999px;line-height:1.3}

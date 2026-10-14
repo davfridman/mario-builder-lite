@@ -282,10 +282,13 @@ function win() {
   cleared = encode(level);
   try { localStorage.setItem(CLEARED, cleared); } catch (e) {}
   updateShare();
+  showWin();
+}
+function showWin() {
   const secs = (frames / 60).toFixed(1);
   showOverlay('<h2>🏁 Level cleared!</h2><p>⏱ ' + secs + 's · 🪙 ' + coins + '/' + totalCoins + ' · 💀 ' + deaths + '</p>' +
     '<div class="row"><button id="oReplay">↻ Replay</button><button id="oEdit">✏️ Edit</button>' +
-    '<button id="oShare" class="primary">🔗 Copy share link</button></div>');
+    '<button id="oShare" class="primary">🔗 Get share link</button></div>');
   $('oReplay').onclick = () => { hideOverlay(); deaths = 0; startPlay(); startMusic(); };
   $('oEdit').onclick = enterEdit;
   $('oShare').onclick = share;
@@ -622,6 +625,7 @@ slider.addEventListener('input', () => { camX = +slider.value; });
 
 addEventListener('keydown', e => {
   const c = e.code;
+  if (e.target.id === 'oUrl') return; // let people select/copy the link
   ac();
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Tab'].includes(c)) e.preventDefault();
   keys[c] = true;
@@ -657,10 +661,28 @@ function share() {
     if (mode === 'edit') enterPlay();
     return;
   }
-  const url = location.origin + location.pathname + '?play#' + encode(level);
-  const done = () => toast('Link copied! Send it to anyone 🎉');
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => prompt('Copy this link:', url));
-  else prompt('Copy this link:', url);
+  const url = shareUrl();
+  showOverlay('<h2>🔗 Share link</h2><p>Anyone who opens this plays your level</p>' +
+    '<input id="oUrl" class="url" readonly value="' + url + '">' +
+    '<div class="row"><button id="oCopy" class="primary">📋 Copy</button>' +
+    '<a id="oOpen" class="btn" href="' + url + '" target="_blank" rel="noopener">↗ Open</a>' +
+    '<button id="oClose">Close</button></div>');
+  const inp = $('oUrl');
+  inp.focus(); inp.select();
+  $('oCopy').onclick = () => {
+    const ok = () => toast('Link copied! Send it to anyone 🎉');
+    const manual = () => { inp.focus(); inp.select(); try { document.execCommand('copy') ? ok() : toast('Press Ctrl/Cmd+C to copy'); } catch (e) { toast('Press Ctrl/Cmd+C to copy'); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, manual);
+    else manual();
+  };
+  $('oClose').onclick = () => { if (mode === 'play' && state === 'won') showWin(); else hideOverlay(); };
+}
+// always the full public address, even when the page is opened from a file or localhost
+const PUBLIC_URL = 'https://davfridman.github.io/mario-builder-lite/';
+function shareUrl() {
+  const live = /^https?:$/.test(location.protocol) && !/^(localhost|127\.|\[::1\])/.test(location.hostname);
+  const base = live ? location.href.split(/[?#]/)[0] : PUBLIC_URL;
+  return base + '?play#' + encode(level);
 }
 
 // ---------- main loop ----------
