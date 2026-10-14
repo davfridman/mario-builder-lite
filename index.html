@@ -1,5 +1,32 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Level Builder Lite</title>
+<html lang="en">
+<head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>body{margin:0;display:grid;place-items:center;height:100vh;background:#5c94fc;font:700 28px system-ui;color:#fff}</style>
-</head><body>Level Builder Lite — coming soon</body></html>
+<title>Level Builder Lite</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Level Builder <span>Lite</span></h1>
+  <div id="palette" role="toolbar" aria-label="Tiles"></div>
+  <div class="btns">
+    <button id="btnPlay" class="primary">▶ Play <kbd>Tab</kbd></button>
+    <button id="btnShare">🔒 Share (beat it first)</button>
+    <button id="btnDemo">✨ Example</button>
+    <button id="btnClear">🗑 New</button>
+    <button id="btnMute" title="Mute (M)">🔊</button>
+  </div>
+</header>
+<main>
+  <div class="stage">
+    <canvas id="c" width="960" height="544"></canvas>
+    <div id="overlay" hidden></div>
+    <div id="toast" hidden></div>
+  </div>
+  <input id="scroll" type="range" min="0" max="1600" value="0" aria-label="Scroll level">
+  <p id="hint"></p>
+</main>
+<script src="game.js"></script>
+</body>
+</html>
