@@ -77,6 +77,25 @@ body::after{
 .keys dd{margin:0}
 .goal-line{margin:0;padding:8px 10px;background:var(--sun);border:3px solid var(--ink);border-radius:12px;font-weight:600}
 
+/* leaderboard */
+.tray h2:not(:first-child){margin-top:16px}
+.empty{margin:0;opacity:.7;font-size:14px}
+.recline{margin:0;padding:8px 10px;background:#fff;border:3px solid var(--ink);border-radius:12px;font-size:15px}
+.board{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:5px;text-align:left}
+.board li{display:grid;grid-template-columns:24px 1fr auto auto;gap:8px;align-items:center;background:#fff;border:3px solid var(--ink);border-radius:10px;padding:4px 8px;font-size:14px}
+.board li.me{background:var(--sun)}
+.board .rk{font-weight:700;color:var(--tomato)}
+.board .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.board .tm{font-weight:700}
+.board .cn{opacity:.6;font-size:12px}
+.card .stats{font-size:17px;margin-bottom:8px}
+.card .rec{margin:0 0 12px;padding:6px 10px;border:3px solid var(--ink);border-radius:10px;background:#fff}
+.card .rec.good{background:var(--grass);font-weight:700}
+.nameform{margin:0 0 14px;text-align:left}
+.nameform label{display:block;font-size:13px;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px}
+.nameform input{flex:1;min-width:0;font:600 16px var(--font);color:var(--ink);padding:8px 10px;border:3px solid var(--ink);border-radius:10px;background:#fff}
+.card .board{margin:0 0 14px}
+
 /* steps guide */
 .steps{
   list-style:none;margin:0 0 14px;padding:10px 40px 10px 12px;display:flex;flex-wrap:wrap;gap:6px 16px;

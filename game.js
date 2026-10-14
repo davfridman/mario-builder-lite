@@ -273,7 +273,7 @@ try { if (localStorage.getItem(STEPS)) $('steps').hidden = true; } catch (e) {}
 function enterPlay() {
   if (!hasType(GOAL)) { toast('Place a goal flag first'); return; }
   mode = 'play'; deaths = 0; hideOverlay(); painting = null;
-  startPlay(); startMusic(); setHint();
+  startPlay(); startMusic(); setHint(); refreshPlayPane();
   btnPlay.innerHTML = 'Edit <kbd>Tab</kbd>'; slider.style.visibility = 'hidden';
   $('paneBuild').hidden = true; $('panePlay').hidden = false; $('steps').style.display = 'none';
   syncTouch();
@@ -358,21 +358,92 @@ function die() {
   burst(player.x + 12, player.y + 14, 20, ['#e53935', '#ffcc80', '#1e63d6'], 5);
   stopMusic(); sfx.die();
 }
+// ---------- leaderboard: top 5 per level on this device + a record carried inside the share link ----------
+const NAME_KEY = 'lbl-name', SCORES = 'lbl-scores-';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const cleanName = s => String(s || '').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 12);
+const fmtTime = cs => (cs / 100).toFixed(2) + 's';
+function levelId() {
+  const s = encode(level); let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+// a record that arrived in the URL only counts while the level is unchanged
+let linkRecord = null;
+{
+  const q = new URLSearchParams(location.search), n = cleanName(q.get('rn')), t = Math.round(+q.get('rt'));
+  if (n && t > 0 && t < 6000000) linkRecord = { name: n, time: t, id: encode(level) };
+}
+function getBoard() {
+  try { const b = JSON.parse(localStorage.getItem(SCORES + levelId()) || '[]'); return Array.isArray(b) ? b : []; } catch (e) { return []; }
+}
+function addScore(entry) {
+  const b = getBoard(); b.push(entry);
+  b.sort((x, y) => x.t - y.t || y.c - x.c);
+  const top = b.slice(0, 5);
+  try { localStorage.setItem(SCORES + levelId(), JSON.stringify(top)); } catch (e) {}
+  return top.findIndex(e => e === entry);
+}
+function bestRecord() {
+  const own = getBoard()[0];
+  const lr = linkRecord && linkRecord.id === encode(level) ? linkRecord : null;
+  if (own && (!lr || own.t < lr.time)) return { name: own.n, time: own.t };
+  return lr ? { name: lr.name, time: lr.time } : null;
+}
+function boardHTML(hl) {
+  const b = getBoard();
+  if (!b.length) return '<p class="empty">No times saved yet. Be the first!</p>';
+  return '<ol class="board">' + b.map((e, i) =>
+    '<li' + (i === hl ? ' class="me"' : '') + '><span class="rk">' + (i + 1) + '</span><span class="nm">' + esc(e.n) +
+    '</span><span class="tm">' + fmtTime(e.t) + '</span><span class="cn">' + e.c + ' coins</span></li>').join('') + '</ol>';
+}
+function refreshPlayPane() {
+  const r = bestRecord();
+  $('recordBox').innerHTML = r
+    ? '<p class="recline"><b>' + esc(r.name) + '</b> &middot; ' + fmtTime(r.time) + '</p>'
+    : '<p class="empty">No record yet. Set the first one!</p>';
+  $('boardBox').innerHTML = boardHTML(-1);
+}
+
+let lastRun = null;
 function win() {
   state = 'won'; shake = 0; stopMusic(); sfx.win();
   cleared = encode(level);
   try { localStorage.setItem(CLEARED, cleared); } catch (e) {}
   updateShare();
+  lastRun = { t: Math.round(frames * 100 / 60), c: coins, tc: totalCoins, d: deaths, saved: false, idx: -1, rec: bestRecord() };
   showWin();
 }
 function showWin() {
-  const secs = (frames / 60).toFixed(1);
-  showOverlay('<h2>Level cleared!</h2><p>Time ' + secs + 's &middot; Coins ' + coins + '/' + totalCoins + ' &middot; Deaths ' + deaths + '</p>' +
-    '<div class="row"><button id="oReplay" class="btn">Replay</button><button id="oEdit" class="btn">Edit level</button>' +
-    '<button id="oShare" class="btn sun">Get share link</button></div>');
+  const r = lastRun;
+  const beat = !r.rec || r.t < r.rec.time;
+  let html = '<h2>Level cleared!</h2><p class="stats">Time <b>' + fmtTime(r.t) + '</b> &middot; Coins ' + r.c + '/' + r.tc + ' &middot; Deaths ' + r.d + '</p>';
+  if (!r.rec) html += '<p class="rec good">First record on this level!</p>';
+  else if (beat) html += '<p class="rec good">New record! You beat ' + esc(r.rec.name) + ' (' + fmtTime(r.rec.time) + ')</p>';
+  else html += '<p class="rec">Record to beat: <b>' + esc(r.rec.name) + '</b> &middot; ' + fmtTime(r.rec.time) + '</p>';
+  if (!r.saved) {
+    let nm = ''; try { nm = localStorage.getItem(NAME_KEY) || ''; } catch (e) {}
+    html += '<form id="oForm" class="nameform"><label for="oName">Your name</label><div class="row">' +
+      '<input id="oName" maxlength="12" autocomplete="off" placeholder="Name" value="' + esc(nm) + '">' +
+      '<button class="btn go" type="submit">Save time</button></div></form>';
+  } else html += boardHTML(r.idx);
+  html += '<div class="row"><button id="oReplay" class="btn">Replay</button><button id="oEdit" class="btn">Edit level</button>' +
+    '<button id="oShare" class="btn sun">Get share link</button></div>';
+  showOverlay(html);
   $('oReplay').onclick = () => { hideOverlay(); deaths = 0; startPlay(); startMusic(); };
   $('oEdit').onclick = enterEdit;
   $('oShare').onclick = share;
+  const form = $('oForm');
+  if (form) {
+    const inp = $('oName'); inp.focus(); inp.select();
+    form.onsubmit = e => {
+      e.preventDefault();
+      const n = cleanName(inp.value) || 'Player';
+      try { localStorage.setItem(NAME_KEY, n); } catch (err) {}
+      r.idx = addScore({ n, t: r.t, c: r.c, d: r.d }); r.saved = true;
+      refreshPlayPane(); showWin();
+    };
+  }
 }
 
 function update() {
@@ -719,7 +790,7 @@ slider.addEventListener('input', () => { camX = +slider.value; });
 
 addEventListener('keydown', e => {
   const c = e.code;
-  if (e.target.id === 'oUrl') return; // let people select/copy the link
+  if (e.target.matches && e.target.matches('input[type=text], input:not([type])')) return; // typing a name / copying the link
   ac();
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Tab'].includes(c)) e.preventDefault();
   keys[c] = true;
@@ -773,7 +844,9 @@ function share() {
     return;
   }
   const url = shareUrl();
-  showOverlay('<h2>Share link</h2><p>Anyone who opens this plays your level</p>' +
+  const rec = bestRecord();
+  showOverlay('<h2>Share link</h2><p>Anyone who opens this plays your level' +
+    (rec ? '.<br>It carries the record to beat: <b>' + esc(rec.name) + '</b> &middot; ' + fmtTime(rec.time) : '') + '</p>' +
     '<input id="oUrl" class="url" readonly value="' + url + '">' +
     '<div class="row"><button id="oCopy" class="btn go">Copy link</button>' +
     '<a id="oOpen" class="btn a" href="' + url + '" target="_blank" rel="noopener">Open</a>' +
@@ -793,7 +866,9 @@ const PUBLIC_URL = 'https://davfridman.github.io/mario-builder-lite/';
 function shareUrl() {
   const live = /^https?:$/.test(location.protocol) && !/^(localhost|127\.|\[::1\])/.test(location.hostname);
   const base = live ? location.href.split(/[?#]/)[0] : PUBLIC_URL;
-  return base + '?play#' + encode(level);
+  const rec = bestRecord();
+  const recQ = rec ? '&rn=' + encodeURIComponent(rec.name) + '&rt=' + rec.time : '';
+  return base + '?play' + recQ + '#' + encode(level);
 }
 
 // ---------- main loop ----------
