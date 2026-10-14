@@ -178,10 +178,18 @@ function toast(msg) {
 }
 function showOverlay(html) { overlay.innerHTML = '<div class="card">' + html + '</div>'; overlay.hidden = false; }
 function hideOverlay() { overlay.hidden = true; }
+// phones and tablets: on-screen buttons while playing (add ?touch to the URL to try them on a desktop)
+const isTouch = matchMedia('(pointer: coarse)').matches || /[?&]touch\b/.test(location.search);
+if (isTouch) document.body.classList.add('touch-device');
+function syncTouch() {
+  document.body.classList.toggle('playing', mode === 'play');
+  $('touch').hidden = !(isTouch && mode === 'play');
+}
 function setHint() {
   hint.textContent = mode === 'edit'
-    ? 'Click or drag to paint · right-click erases · scroll the level with A/D, the mouse wheel or the slider · Tab to play'
-    : 'Tab or Esc goes back to the editor · M toggles sound';
+    ? (isTouch ? 'Tap or drag to paint · scroll the level with the slider · tap Play to try it'
+               : 'Click or drag to paint · right-click erases · scroll the level with A/D, the mouse wheel or the slider · Tab to play')
+    : (isTouch ? 'Use the buttons on the screen' : 'Tab or Esc goes back to the editor · M toggles sound');
 }
 
 // palette icons are drawn with the game's own art, so the toolbar matches the level
@@ -268,6 +276,7 @@ function enterPlay() {
   startPlay(); startMusic(); setHint();
   btnPlay.innerHTML = 'Edit <kbd>Tab</kbd>'; slider.style.visibility = 'hidden';
   $('paneBuild').hidden = true; $('panePlay').hidden = false; $('steps').style.display = 'none';
+  syncTouch();
 }
 function enterEdit() {
   mode = 'edit'; stopMusic(); hideOverlay(); setHint();
@@ -275,6 +284,8 @@ function enterEdit() {
   btnPlay.innerHTML = 'Play <kbd>Tab</kbd>'; slider.style.visibility = 'visible';
   slider.value = camX = Math.max(0, Math.min(camX, W * T - VW));
   $('paneBuild').hidden = false; $('panePlay').hidden = true; $('steps').style.display = '';
+  for (const k in keys) keys[k] = false;
+  syncTouch();
 }
 
 // ---------- gameplay ----------
@@ -726,6 +737,23 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+// on-screen buttons feed the same `keys` state the keyboard uses
+$('touch').querySelectorAll('button').forEach(b => {
+  const k = b.dataset.k === 'Jump' ? 'Space' : b.dataset.k;
+  const down = e => {
+    e.preventDefault(); ac();
+    try { b.setPointerCapture(e.pointerId); } catch (err) {}
+    b.classList.add('on'); keys[k] = true;
+    if (k === 'Space') { jumpPressed = true; startMusic(); }
+  };
+  const up = () => { b.classList.remove('on'); keys[k] = false; };
+  b.addEventListener('pointerdown', down);
+  b.addEventListener('pointerup', up);
+  b.addEventListener('pointercancel', up);
+  b.addEventListener('lostpointercapture', up);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
 
 // ---------- buttons ----------
 document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });
