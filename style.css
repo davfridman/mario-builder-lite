@@ -19,7 +19,7 @@ body::after{
   background:linear-gradient(var(--grass) 0 14px, var(--grass-d) 14px 18px, var(--dirt) 18px);
   border-top:4px solid var(--ink);
 }
-.page{max-width:1240px;margin:0 auto;padding:16px}
+.page{max-width:1240px;margin:0 auto;padding:16px max(16px,env(safe-area-inset-right,0px)) 16px max(16px,env(safe-area-inset-left,0px))}
 
 /* header */
 .top{display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px;margin-bottom:18px}
@@ -127,8 +127,8 @@ canvas#c{
 #scroll{width:100%;margin:14px 0 0;accent-color:var(--tomato)}
 #hint{margin:6px 2px 0;font-size:14px;opacity:.8}
 
-/* on-screen controls (phones). Portrait: a row UNDER the game, so they never cover it.
-   Landscape / full screen: small see-through buttons in the bottom corners. */
+/* on-screen controls (phones). They never sit on top of the game:
+   portrait = a row under the game, landscape = their own strips left and right of the game. */
 .touch{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 2px 0;line-height:1}
 .touch[hidden]{display:none}
 .touch .pad{display:flex;gap:12px}
@@ -140,14 +140,35 @@ canvas#c{
 }
 .touch button.on{background:var(--sun);transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
 .touch .jump{width:132px;border-radius:36px;font-size:18px;background:var(--grass)}
+
+/* sizes come from the part of the screen the browser really shows (set from visualViewport in game.js),
+   so the address bar / toolbar never covers the game */
+:root{
+  --gut:104px;
+  --availh:calc(var(--apph,100vh) - 76px);
+  --sidepad:calc(24px + env(safe-area-inset-left,0px) + env(safe-area-inset-right,0px));
+}
+body.fs{
+  --availh:calc(var(--apph,100vh) - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 8px);
+  --sidepad:calc(8px + env(safe-area-inset-left,0px) + env(safe-area-inset-right,0px));
+}
 @media (orientation:landscape){
-  .touch{position:absolute;left:0;right:0;bottom:0;padding:0 2.5% 2.5%;pointer-events:none}
-  .touch button{pointer-events:auto;width:clamp(46px,14vh,66px);height:clamp(46px,14vh,66px);opacity:.6;font-size:20px;box-shadow:0 3px 0 var(--ink)}
-  .touch .jump{width:clamp(72px,22vh,110px);border-radius:999px;font-size:15px}
-  .touch button.on{opacity:.95}
+  body.touch-device.playing .stage{
+    display:grid;grid-template-columns:var(--gut) auto var(--gut);align-items:center;justify-content:center;
+    width:auto;margin:0 auto;
+  }
+  body.touch-device.playing .touch{display:contents}
+  body.touch-device.playing .touch .pad{grid-column:1;grid-row:1;flex-direction:column;align-items:center;gap:18px}
+  body.touch-device.playing canvas#c{
+    grid-column:2;grid-row:1;
+    width:min(calc(var(--availh) * 960 / 544), calc(var(--appw,100vw) - 2 * var(--gut) - var(--sidepad)));
+  }
+  body.touch-device.playing .touch .jump{grid-column:3;grid-row:1;justify-self:center;width:88px;height:88px;border-radius:50%;font-size:16px}
+  body.touch-device.playing .touch button:not(.jump){width:64px;height:64px;font-size:20px}
+  body.touch-device.playing .fsbtn{top:6px;right:6px;width:calc(var(--gut) - 12px);white-space:normal;font-size:11px;padding:3px 4px;border-width:2px;border-radius:9px}
 }
 
-/* full screen (real fullscreen where the browser allows it, otherwise this fills the viewport) */
+/* full screen (real fullscreen where the browser allows it, otherwise this fills the visible viewport) */
 .fsbtn{position:absolute;top:50px;right:10px;z-index:2;padding:3px 10px;font-size:13px;line-height:1.25;box-shadow:0 3px 0 var(--ink);opacity:.92}
 .fsbtn[hidden]{display:none}
 body.fs{overflow:hidden}
@@ -155,23 +176,25 @@ body.fs .top, body.fs .tray, body.fs .steps, body.fs .rotate, body.fs #hint, bod
 body.fs .page{padding:0;max-width:none}
 body.fs .work{display:block}
 body.fs .stage-col{
-  position:fixed;inset:0;z-index:40;background:#0d0c2b;
+  position:fixed;left:0;top:0;z-index:40;background:#0d0c2b;
+  width:var(--appw,100vw);height:var(--apph,100vh);
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
 }
-body.fs .stage{width:min(100vw,calc(100vh * 960 / 544));width:min(100vw,calc(100dvh * 960 / 544))}
+body.fs .stage{width:min(100%,calc(var(--availh) * 960 / 544))}
 body.fs canvas#c{border:0;border-radius:0;box-shadow:none}
 body.fs .touch{padding-left:12px;padding-right:12px}
 @media (max-height:520px){ .fsbtn{top:44px;right:8px;padding:1px 8px;font-size:11px;border-width:2px;border-radius:9px} }
 
 .rotate{display:none;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:8px 8px 8px 12px;background:var(--sun);border:3px solid var(--ink);border-radius:12px;font-weight:600}
 @media (orientation:portrait){ body.touch-device.playing:not(.fs) .rotate{display:flex} }
-/* phone held sideways: give the game the whole screen */
-@media (orientation:landscape) and (pointer:coarse){
-  body.playing:not(.fs) .logo, body.playing:not(.fs) .steps, body.playing:not(.fs) #hint, body.playing:not(.fs) #scroll, body.playing:not(.fs) .tray{display:none}
-  body.playing:not(.fs) .page{padding:6px}
-  body.playing:not(.fs) .top{margin-bottom:6px}
-  body.playing:not(.fs) .work{grid-template-columns:1fr}
-  body.playing:not(.fs) .stage{width:min(100%,calc((100vh - 70px) * 960 / 544));margin:0 auto}
+/* phone held sideways, not full screen: keep only the action buttons above the game */
+@media (orientation:landscape){
+  body.touch-device.playing:not(.fs) .logo, body.touch-device.playing:not(.fs) .steps, body.touch-device.playing:not(.fs) #hint,
+  body.touch-device.playing:not(.fs) #scroll, body.touch-device.playing:not(.fs) .tray{display:none}
+  body.touch-device.playing:not(.fs) .page{padding:6px max(6px,env(safe-area-inset-right,0px)) 6px max(6px,env(safe-area-inset-left,0px))}
+  body.touch-device.playing:not(.fs) .top{margin-bottom:6px}
+  body.touch-device.playing:not(.fs) .work{grid-template-columns:1fr}
 }
 
 /* modal overlay */

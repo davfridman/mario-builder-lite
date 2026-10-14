@@ -368,6 +368,8 @@ function setFs(on) {
   if (on === document.body.classList.contains('fs')) return;
   document.body.classList.toggle('fs', on);
   btnFs.textContent = on ? 'Exit full screen' : 'Full screen';
+  if (on) window.scrollTo(0, 0);
+  setTimeout(fitViewport, 350);
   const root = document.documentElement;
   const quiet = p => { if (p && p.catch) p.catch(() => {}); };
   try {
@@ -389,6 +391,19 @@ function setFs(on) {
   if (!nativeFsElement() && document.body.classList.contains('fs')) setFs(false);
 }));
 btnFs.onclick = () => setFs(!document.body.classList.contains('fs'));
+
+// the CSS sizes the game from the area the browser really shows (minus address bar / toolbars),
+// which on phones is smaller than 100vh
+function fitViewport() {
+  const vv = window.visualViewport, zoomed = vv && vv.scale > 1.01;
+  const w = Math.round(vv && !zoomed ? vv.width : innerWidth), h = Math.round(vv && !zoomed ? vv.height : innerHeight);
+  const r = document.documentElement.style;
+  r.setProperty('--appw', w + 'px'); r.setProperty('--apph', h + 'px');
+}
+fitViewport();
+addEventListener('resize', fitViewport);
+addEventListener('orientationchange', () => setTimeout(fitViewport, 300));
+if (window.visualViewport) visualViewport.addEventListener('resize', fitViewport);
 
 // ---------- mode switching ----------
 function enterPlay() {
