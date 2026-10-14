@@ -419,7 +419,7 @@ function startPlay() {
     const t = world[i], x = i % W, y = (i / W) | 0;
     if (t === START) { sx = x; sy = y; world[i] = 0; }
     else if (t === GOAL) goal = { x, y };
-    else if (t === ENEMY) { enemies.push({ x: x * T + 3, y: y * T + T - 26, w: 26, h: 26, vx: -0.9, vy: 0, onGround: false, dead: 0 }); world[i] = 0; }
+    else if (t === ENEMY) { enemies.push({ x: x * T + 3, y: y * T + T - 26, w: 26, h: 26, vx: -0.9, vy: 0, onGround: false, dead: 0, killed: false }); world[i] = 0; }
     else if (t === HPLAT || t === VPLAT) { plats.push({ x: x * T, y: y * T, ox: x * T, oy: y * T, w: 64, h: 12, v: t === VPLAT, ph: 0 }); world[i] = 0; }
     else if (t === COIN || t === QBLOCK) totalCoins++;
   }
@@ -659,22 +659,24 @@ function update() {
   if (p.y > H * T + 60) { die(); return; }
 
   // enemies
+  // a stomped enemy is `killed` for good; `dead` only times the squashed sprite before it is removed
   for (const e of enemies) {
-    if (e.dead) { e.dead--; continue; }
+    if (e.killed) { e.dead--; continue; }
     e.vy += 0.5; if (e.vy > 10) e.vy = 10;
     const wasG = e.onGround;
     const er = moveBody(e);
     if (er.x) e.vx = -e.vx;
     else if (wasG && e.onGround && !solidAt(Math.floor((e.x + (e.vx > 0 ? e.w + 2 : -2)) / T), Math.floor((e.y + e.h + 4) / T))) e.vx = -e.vx;
-    if (e.y > H * T + 100) e.dead = 1;
+    if (e.y > H * T + 100) { e.killed = true; e.dead = 0; continue; }
     if (p.x < e.x + e.w && p.x + p.w > e.x && p.y < e.y + e.h && p.y + p.h > e.y) {
       if (p.vy > 0 && p.y + p.h - e.y < 18) {
-        e.dead = 25; p.vy = keys.Space || keys.ArrowUp || keys.KeyW ? -11 : -8; sfx.stomp(); shake = 4;
+        e.killed = true; e.dead = 25;
+        p.vy = keys.Space || keys.ArrowUp || keys.KeyW ? -11 : -8; sfx.stomp(); shake = 4;
         burst(e.x + 13, e.y + 20, 10, ['#b5472a', '#ffcc80'], 3);
       } else { die(); return; }
     }
   }
-  enemies = enemies.filter(e => !(e.dead === 0 && e.y > H * T + 90));
+  enemies = enemies.filter(e => !(e.killed && e.dead <= 0));
 
   // camera
   const tx = p.x + p.w / 2 - VW / 2 + p.face * 50;
@@ -851,7 +853,7 @@ function render() {
   } else {
     drawLevel(world, false, tick);
     for (const pl of plats) drawPlat(pl.x - camX, pl.y);
-    for (const e of enemies) if (e.y < H * T + 50) drawEnemy(e.x - camX, e.y, e.w, e.h, e.vx > 0 ? 1 : -1, tick, e.dead > 0);
+    for (const e of enemies) if (e.y < H * T + 50) drawEnemy(e.x - camX, e.y, e.w, e.h, e.vx > 0 ? 1 : -1, tick, !!e.killed);
     const p = player;
     if (state === 'dead') ctx.globalAlpha = 0.9;
     drawPlayerAt(p.x - camX, p.y, p.face, p.sq, p.onGround && Math.abs(p.vx) > 0.5, tick);
