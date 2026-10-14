@@ -26,8 +26,23 @@ let ctx = cv.getContext('2d');
 const overlay = $('overlay'), toastEl = $('toast'), hint = $('hint'), slider = $('scroll');
 const btnPlay = $('btnPlay'), btnShare = $('btnShare'), btnMute = $('btnMute');
 
-// ---------- level encode / decode (RLE + base64url, lives in the URL) ----------
-function encode(l) {
+// ---------- level encode / decode (lives in the URL) ----------
+// v2 (what links use now): "." + base64url of packed runs. One byte per run = tile<<4 | length (1..14);
+//   a low nibble of 15 means "15 + a varint that follows". Roughly 40% shorter than v1.
+// v1 (legacy): base64 of text runs "<tile><length>." in base36. Old links still decode, and v1 is
+//   still used internally as a stable level id so saved scores and "cleared" flags keep matching.
+const bytesToB64 = bytes => {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const b64ToBytes = s => {
+  const raw = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+};
+function encodeV1(l) {
   let out = '', i = 0;
   while (i < l.length) {
     const t = l[i]; let n = 1;
@@ -37,18 +52,70 @@ function encode(l) {
   }
   return btoa(out).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-function decode(s) {
+function decodeV1(s) {
   try {
     const raw = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
     const l = new Uint8Array(W * H); let i = 0;
     for (const run of raw.split('.')) {
       if (!run) continue;
       let t = parseInt(run[0], 36); const n = parseInt(run.slice(1), 36);
-      if (!(t >= 0 && t <= HPLAT + 0) || t === USED || !(n > 0)) t = 0;
+      if (!(t >= 0 && t <= VPLAT) || t === USED || !(n > 0)) t = 0;
       for (let k = 0; k < n && i < l.length; k++) l[i++] = t;
     }
     return i === l.length ? l : null;
   } catch (e) { return null; }
+}
+function encodeV2(l) {
+  const b = []; let i = 0;
+  while (i < l.length) {
+    const t = l[i]; let n = 1;
+    while (i + n < l.length && l[i + n] === t) n++;
+    i += n;
+    if (t > 15) throw new Error('tile out of range');
+    if (n < 15) b.push((t << 4) | n);
+    else {
+      b.push((t << 4) | 15);
+      let r = n - 15;
+      while (r >= 128) { b.push((r & 127) | 128); r >>= 7; }
+      b.push(r);
+    }
+  }
+  return '.' + bytesToB64(b);
+}
+function decodeV2(s) {
+  try {
+    const b = b64ToBytes(s), l = new Uint8Array(W * H);
+    let p = 0, i = 0;
+    while (p < b.length) {
+      let t = b[p] >> 4, n = b[p] & 15; p++;
+      if (n === 0) return null;
+      if (n === 15) {
+        let r = 0, shift = 0, c;
+        do {
+          if (p >= b.length || shift > 21) return null;
+          c = b[p++]; r |= (c & 127) << shift; shift += 7;
+        } while (c & 128);
+        n = 15 + r;
+      }
+      if (t > VPLAT || t === USED) t = 0;
+      if (i + n > l.length) return null;
+      l.fill(t, i, i + n); i += n;
+    }
+    return i === l.length ? l : null;
+  } catch (e) { return null; }
+}
+const sameLevel = (a, b) => !!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]);
+function decode(s) {
+  if (!s) return null;
+  return s[0] === '.' ? decodeV2(s.slice(1)) : decodeV1(s);
+}
+// every link is checked by decoding it back; if that ever disagrees we fall back to the old format
+function encode(l) {
+  try {
+    const s = encodeV2(l);
+    if (sameLevel(decode(s), l)) return s;
+  } catch (e) {}
+  return encodeV1(l);
 }
 
 // ---------- sample levels ----------
@@ -87,7 +154,7 @@ let level = null, cleared = null, startInPlay = false;
     cleared = localStorage.getItem(CLEARED);
   } catch (e) {}
   if (!level) level = demo();
-  if (/[?&]play\b/.test(location.search)) { startInPlay = true; cleared = encode(level); }
+  if (/[?&]play\b/.test(location.search)) { startInPlay = true; cleared = encodeV1(level); }
 }
 let mode = 'edit', sel = GROUND, camX = 0, hover = null, painting = null, lastPaint = null, dirty = false;
 let world, player, enemies = [], plats = [], bumps = [], springs = {}, particles = [];
@@ -95,7 +162,7 @@ let coins = 0, totalCoins = 0, frames = 0, deaths = 0, state = 'run', deadT = 0,
 let jumpPressed = false, muted = false;
 const keys = {};
 
-const isCleared = () => cleared === encode(level);
+const isCleared = () => cleared === encodeV1(level);
 const hasType = t => level.indexOf(t) !== -1;
 function save() {
   const enc = encode(level);
@@ -364,7 +431,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const cleanName = s => String(s || '').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 12);
 const fmtTime = cs => (cs / 100).toFixed(2) + 's';
 function levelId() {
-  const s = encode(level); let h = 5381;
+  const s = encodeV1(level); let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
   return h.toString(36);
 }
@@ -372,7 +439,7 @@ function levelId() {
 let linkRecord = null;
 {
   const q = new URLSearchParams(location.search), n = cleanName(q.get('rn')), t = Math.round(+q.get('rt'));
-  if (n && t > 0 && t < 6000000) linkRecord = { name: n, time: t, id: encode(level) };
+  if (n && t > 0 && t < 6000000) linkRecord = { name: n, time: t, id: encodeV1(level) };
 }
 function getBoard() {
   try { const b = JSON.parse(localStorage.getItem(SCORES + levelId()) || '[]'); return Array.isArray(b) ? b : []; } catch (e) { return []; }
@@ -386,7 +453,7 @@ function addScore(entry) {
 }
 function bestRecord() {
   const own = getBoard()[0];
-  const lr = linkRecord && linkRecord.id === encode(level) ? linkRecord : null;
+  const lr = linkRecord && linkRecord.id === encodeV1(level) ? linkRecord : null;
   if (own && (!lr || own.t < lr.time)) return { name: own.n, time: own.t };
   return lr ? { name: lr.name, time: lr.time } : null;
 }
@@ -408,7 +475,7 @@ function refreshPlayPane() {
 let lastRun = null;
 function win() {
   state = 'won'; shake = 0; stopMusic(); sfx.win();
-  cleared = encode(level);
+  cleared = encodeV1(level);
   try { localStorage.setItem(CLEARED, cleared); } catch (e) {}
   updateShare();
   lastRun = { t: Math.round(frames * 100 / 60), c: coins, tc: totalCoins, d: deaths, saved: false, idx: -1, rec: bestRecord() };
