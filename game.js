@@ -251,12 +251,14 @@ if (isTouch) document.body.classList.add('touch-device');
 function syncTouch() {
   document.body.classList.toggle('playing', mode === 'play');
   $('touch').hidden = !(isTouch && mode === 'play');
+  $('btnFs').hidden = mode !== 'play';
 }
 function setHint() {
   hint.textContent = mode === 'edit'
     ? (isTouch ? 'Tap or drag to paint · scroll the level with the slider · tap Play to try it'
                : 'Click or drag to paint · right-click erases · scroll the level with A/D, the mouse wheel or the slider · Tab to play')
-    : (isTouch ? 'Use the buttons on the screen' : 'Tab or Esc goes back to the editor · M toggles sound');
+    : (isTouch ? 'Use the buttons on the screen · Full screen gives you the most room'
+               : 'F full screen · Tab or Esc goes back to the editor · M toggles sound');
 }
 
 // palette icons are drawn with the game's own art, so the toolbar matches the level
@@ -326,15 +328,67 @@ function selectTile(t) {
   const body = document.createElement('div');
   const h = document.createElement('h4'); h.textContent = p.name;
   const d = document.createElement('p'); d.textContent = p.desc;
-  const k = document.createElement('small'); k.textContent = 'Shortcut: ' + p.key;
+  const k = document.createElement('small'); k.textContent = isTouch ? '' : 'Shortcut: ' + p.key;
   body.append(h, d, k);
-  info.append(makeIcon(t, 56), body);
+  const x = document.createElement('button');
+  x.type = 'button'; x.className = 'x'; x.innerHTML = '&times;'; x.setAttribute('aria-label', 'Hide this description');
+  x.onclick = () => closeBox('info');
+  info.append(makeIcon(t, 56), body, x);
 }
-$('stepsClose').onclick = () => {
-  $('steps').hidden = true;
-  try { localStorage.setItem(STEPS, '1'); } catch (e) {}
+
+// explanation boxes can be closed (big × on touch screens) and brought back with the Help button
+const HIDDEN = 'lbl-hidden';
+const boxIds = { steps: 'steps', rotate: 'rotate', help: 'helpBox', info: 'info' };
+let closedBoxes = {};
+try {
+  closedBoxes = JSON.parse(localStorage.getItem(HIDDEN) || '{}') || {};
+  if (localStorage.getItem(STEPS)) closedBoxes.steps = 1;
+} catch (e) { closedBoxes = {}; }
+function applyClosed() {
+  for (const k in boxIds) $(boxIds[k]).classList.toggle('closed', !!closedBoxes[k]);
+}
+function closeBox(k) {
+  closedBoxes[k] = 1;
+  try { localStorage.setItem(HIDDEN, JSON.stringify(closedBoxes)); } catch (e) {}
+  applyClosed();
+}
+document.querySelectorAll('[data-close]').forEach(b => { b.onclick = () => closeBox(b.dataset.close); });
+$('btnHelp').onclick = () => {
+  closedBoxes = {};
+  try { localStorage.removeItem(HIDDEN); localStorage.removeItem(STEPS); } catch (e) {}
+  applyClosed(); toast('Tips are back');
 };
-try { if (localStorage.getItem(STEPS)) $('steps').hidden = true; } catch (e) {}
+applyClosed();
+$('keysList').hidden = isTouch; $('touchList').hidden = !isTouch;
+
+// full screen: the real Fullscreen API where the browser has it, otherwise the page fills the viewport
+const btnFs = $('btnFs');
+const nativeFsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+function setFs(on) {
+  if (on === document.body.classList.contains('fs')) return;
+  document.body.classList.toggle('fs', on);
+  btnFs.textContent = on ? 'Exit full screen' : 'Full screen';
+  const root = document.documentElement;
+  const quiet = p => { if (p && p.catch) p.catch(() => {}); };
+  try {
+    if (on) {
+      const req = root.requestFullscreen || root.webkitRequestFullscreen;
+      if (req) quiet(req.call(root));
+      if (screen.orientation && screen.orientation.lock) quiet(screen.orientation.lock('landscape'));
+    } else {
+      if (nativeFsElement()) {
+        const ex = document.exitFullscreen || document.webkitExitFullscreen;
+        if (ex) quiet(ex.call(document));
+      }
+      if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+    }
+  } catch (e) {}
+}
+// the browser's own Esc / swipe-down exit should leave our full-screen layout too
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+  if (!nativeFsElement() && document.body.classList.contains('fs')) setFs(false);
+}));
+btnFs.onclick = () => setFs(!document.body.classList.contains('fs'));
 
 // ---------- mode switching ----------
 function enterPlay() {
@@ -346,6 +400,7 @@ function enterPlay() {
   syncTouch();
 }
 function enterEdit() {
+  setFs(false);
   mode = 'edit'; stopMusic(); hideOverlay(); setHint();
   history.replaceState(null, '', location.pathname + '#' + encode(level));
   btnPlay.innerHTML = 'Play <kbd>Tab</kbd>'; slider.style.visibility = 'visible';
@@ -865,7 +920,8 @@ addEventListener('keydown', e => {
   if (c === 'KeyM') { if (!e.repeat) setMuted(!muted); return; }
   if (mode === 'play') {
     if (e.repeat) return;
-    if (c === 'Escape') enterEdit();
+    if (c === 'Escape') { if (document.body.classList.contains('fs')) setFs(false); else enterEdit(); }
+    else if (c === 'KeyF') setFs(!document.body.classList.contains('fs'));
     else if (c === 'KeyR') { hideOverlay(); startPlay(); startMusic(); }
     else if (c === 'Space' || c === 'ArrowUp' || c === 'KeyW') { jumpPressed = true; startMusic(); }
   } else {

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <div class="page">
@@ -19,6 +19,7 @@
       <button id="btnDemo" class="btn">Example level</button>
       <button id="btnClear" class="btn">New level</button>
       <button id="btnMute" class="btn" title="Sound on/off (M)">Sound: on</button>
+      <button id="btnHelp" class="btn" title="Show the tips and explanations again">Help</button>
     </nav>
   </header>
 
@@ -29,15 +30,25 @@
         <div id="info" class="info"></div>
       </div>
       <div id="panePlay" hidden>
-        <h2>How to play</h2>
-        <dl class="keys">
-          <dt>Move</dt><dd>&larr; &rarr; or A D</dd>
-          <dt>Jump</dt><dd>Space, &uarr; or W (hold to jump higher)</dd>
-          <dt>Stomp</dt><dd>Land on enemies from above</dd>
-          <dt>Restart</dt><dd>R</dd>
-          <dt>Back to editor</dt><dd>Tab or Esc</dd>
-        </dl>
-        <p class="goal-line">Grab coins, dodge spikes, reach the flag.</p>
+        <div id="helpBox" class="helpbox">
+          <button class="x" data-close="help" aria-label="Hide how to play">&times;</button>
+          <h2>How to play</h2>
+          <dl class="keys" id="keysList">
+            <dt>Move</dt><dd>&larr; &rarr; or A D</dd>
+            <dt>Jump</dt><dd>Space, &uarr; or W (hold to jump higher)</dd>
+            <dt>Stomp</dt><dd>Land on enemies from above</dd>
+            <dt>Restart</dt><dd>R</dd>
+            <dt>Full screen</dt><dd>F</dd>
+            <dt>Back to editor</dt><dd>Tab or Esc</dd>
+          </dl>
+          <dl class="keys" id="touchList" hidden>
+            <dt>Move</dt><dd>&#9664; &#9654; buttons</dd>
+            <dt>Jump</dt><dd>JUMP button (hold to jump higher)</dd>
+            <dt>Stomp</dt><dd>Land on enemies from above</dd>
+            <dt>Big screen</dt><dd>Full screen button, then turn the phone sideways</dd>
+          </dl>
+          <p class="goal-line">Grab coins, dodge spikes, reach the flag.</p>
+        </div>
         <h2>Record to beat</h2>
         <div id="recordBox"></div>
         <h2>Fastest times on this device</h2>
@@ -46,16 +57,20 @@
     </aside>
 
     <section class="stage-col">
-      <ol id="steps" class="steps">
-        <li><b>1</b> Pick a tile on the left</li>
-        <li><b>2</b> Click or drag on the grid to paint</li>
-        <li><b>3</b> Hit Play and beat your level</li>
-        <li><b>4</b> Share the link</li>
-        <button id="stepsClose" class="x" aria-label="Hide guide">&times;</button>
-      </ol>
-      <p id="rotate" class="rotate">Turn your phone sideways for a bigger view.</p>
+      <div id="steps" class="steps">
+        <span class="step"><b>1</b> Pick a tile</span>
+        <span class="step"><b>2</b> Click or drag on the grid to paint</span>
+        <span class="step"><b>3</b> Hit Play and beat your level</span>
+        <span class="step"><b>4</b> Share the link</span>
+        <button class="x" data-close="steps" aria-label="Hide guide">&times;</button>
+      </div>
+      <div id="rotate" class="rotate">
+        <span>Turn your phone sideways for a bigger view, or use Full screen.</span>
+        <button class="x" data-close="rotate" aria-label="Hide this tip">&times;</button>
+      </div>
       <div class="stage">
         <canvas id="c" width="960" height="544"></canvas>
+        <button id="btnFs" class="btn fsbtn" hidden>Full screen</button>
         <div id="touch" class="touch" hidden>
           <div class="pad">
             <button data-k="ArrowLeft" aria-label="Left">&#9664;</button>
@@ -71,6 +86,6 @@
 </div>
 <div id="overlay" hidden></div>
 <div id="toast" hidden></div>
-<script src="game.js?v=7"></script>
+<script src="game.js?v=8"></script>
 </body>
 </html>
